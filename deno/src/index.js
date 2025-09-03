@@ -110,25 +110,26 @@ function Postgres(a, b) {
 
     function sql(strings, ...args) {
       const query = strings && Array.isArray(strings.raw)
-        ? new Query(strings, args, handler, cancel)
+        ? new Query(strings, args, handler, cancel, { postgres_options: options })
         : typeof strings === 'string' && !args.length
           ? new Identifier(options.transform.column.to ? options.transform.column.to(strings) : strings)
           : new Builder(strings, args)
       return query
     }
 
-    function unsafe(string, args = [], options = {}) {
-      arguments.length === 2 && !Array.isArray(args) && (options = args, args = [])
+    function unsafe(string, args = [], queryOptions = {}) {
+      arguments.length === 2 && !Array.isArray(args) && (queryOptions = args, args = [])
       const query = new Query([string], args, handler, cancel, {
         prepare: false,
-        ...options,
-        simple: 'simple' in options ? options.simple : args.length === 0
+        ...queryOptions,
+        simple: 'simple' in queryOptions ? queryOptions.simple : args.length === 0,
+        postgres_options: options
       })
       return query
     }
 
-    function file(path, args = [], options = {}) {
-      arguments.length === 2 && !Array.isArray(args) && (options = args, args = [])
+    function file(path, args = [], queryOptions = {}) {
+      arguments.length === 2 && !Array.isArray(args) && (queryOptions = args, args = [])
       const query = new Query([], args, (query) => {
         fs.readFile(path, 'utf8', (err, string) => {
           if (err)
@@ -138,8 +139,9 @@ function Postgres(a, b) {
           handler(query)
         })
       }, cancel, {
-        ...options,
-        simple: 'simple' in options ? options.simple : args.length === 0
+        ...queryOptions,
+        simple: 'simple' in queryOptions ? queryOptions.simple : args.length === 0,
+        postgres_options: options
       })
       return query
     }
@@ -357,7 +359,9 @@ function Postgres(a, b) {
         : (
           queries.remove(query),
           query.cancelled = true,
-          query.reject(Errors.generic('57014', 'canceling statement due to user request')),
+          query.reject(Errors.generic('57014', query.timedOut 
+            ? 'canceling statement due to timeout'
+            : 'canceling statement due to user request')),
           resolve()
         )
     })
@@ -445,7 +449,7 @@ function parseOptions(a, b) {
   'timeout' in o && (console.log('The timeout option is deprecated, use idle_timeout instead'), o.idle_timeout = o.timeout) // eslint-disable-line
   query.sslrootcert === 'system' && (query.ssl = 'verify-full')
 
-  const ints = ['idle_timeout', 'connect_timeout', 'max_lifetime', 'max_pipeline', 'backoff', 'keep_alive']
+  const ints = ['idle_timeout', 'connect_timeout', 'max_lifetime', 'max_pipeline', 'backoff', 'keep_alive', 'query_timeout']
   const defaults = {
     max             : 10,
     ssl             : false,
@@ -459,7 +463,8 @@ function parseOptions(a, b) {
     debug           : false,
     fetch_types     : true,
     publications    : 'alltables',
-    target_session_attrs: null
+    target_session_attrs: null,
+    query_timeout   : null
   }
 
   return {
