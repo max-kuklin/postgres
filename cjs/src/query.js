@@ -52,6 +52,7 @@ const Query = module.exports.Query = class Query extends Promise {
   }
 
   cancel() {
+    this.clearTimeouts()
     return this.canceller && (this.canceller(this), this.canceller = null)
   }
 
