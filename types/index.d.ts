@@ -60,11 +60,6 @@ interface BaseOptions<T extends Record<string, postgres.PostgresType>> {
    * @default process.env['PGCONNECT_TIMEOUT']
    */
   connect_timeout: number;
-  /**
-   * Query timeout in seconds - cancels queries that run longer than this
-   * @default null (no timeout)
-   */
-  query_timeout: number | null | undefined;
   /** Array of custom types; see more in the README */
   types: T;
   /**
