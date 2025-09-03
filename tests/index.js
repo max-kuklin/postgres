@@ -2614,3 +2614,36 @@ t('Ensure reserve on query throws proper error', async() => {
     'wat', x, reserved.release()
   ]
 })
+
+t('Query timeout cancels long running query', async() => {
+  const sql = postgres({
+    ...options,
+    query_timeout: 1
+  })
+  
+  const start = Date.now()
+  const error = await sql`select pg_sleep(3)`.catch(e => e)
+  const elapsed = Date.now() - start
+  
+  return [
+    '57014',
+    error.code,
+    elapsed < 2000, // Should timeout in ~1 second, not 3 seconds
+    await sql.end()
+  ]
+})
+
+t('Query timeout allows quick queries to complete', async() => {
+  const sql = postgres({
+    ...options,
+    query_timeout: 2
+  })
+  
+  const result = await sql`select 1 as x`
+  
+  return [
+    1,
+    result[0].x,
+    await sql.end()
+  ]
+})

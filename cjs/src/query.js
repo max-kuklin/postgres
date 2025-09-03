@@ -23,13 +23,15 @@ const Query = module.exports.Query = class Query extends Promise {
     this.state = null
     this.statement = null
 
-    this.resolve = x => (this.active = false, resolve(x))
-    this.reject = x => (this.active = false, reject(x))
+    this.resolve = x => (this.active = false, this.clearTimeouts(), resolve(x))
+    this.reject = x => (this.active = false, this.clearTimeouts(), reject(x))
 
     this.active = false
     this.cancelled = null
     this.executed = false
     this.signature = ''
+    this.timeoutTimer = null
+    this.timedOut = false
 
     this[originError] = this.handler.debug
       ? new Error()
@@ -50,7 +52,28 @@ const Query = module.exports.Query = class Query extends Promise {
   }
 
   cancel() {
+    this.clearTimeouts()
     return this.canceller && (this.canceller(this), this.canceller = null)
+  }
+
+  clearTimeouts() {
+    if (this.timeoutTimer) {
+      clearTimeout(this.timeoutTimer)
+      this.timeoutTimer = null
+    }
+  }
+
+  setTimeout() {
+    const postgresOptions = this.options.postgres_options
+    if (postgresOptions && postgresOptions.query_timeout && !this.timeoutTimer) {
+      this.timeoutTimer = setTimeout(() => {
+        if (this.active && !this.cancelled) {
+          // Mark as cancelled to distinguish from manual cancellation
+          this.timedOut = true
+          this.cancel()
+        }
+      }, postgresOptions.query_timeout * 1000)
+    }
   }
 
   simple() {
@@ -137,7 +160,7 @@ const Query = module.exports.Query = class Query extends Promise {
   }
 
   async handle() {
-    !this.executed && (this.executed = true) && await 1 && this.handler(this)
+    !this.executed && (this.executed = true) && await 1 && (this.setTimeout(), this.handler(this))
   }
 
   execute() {
